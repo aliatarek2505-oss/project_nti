@@ -215,6 +215,9 @@ def train_models(df):
         "X_train": X_train, "X_test": X_test, "y_train": y_train, "y_test": y_test,
         "rf_model": rf_model, "rf_pred": rf_pred,
         "nn_model": nn_model, "nn_pred": nn_pred,
+        "scaler_rf": scaler_rf,
+        "scaler_nn": scaler_nn,
+        "imputer": imputer,
     }
 
 
@@ -242,11 +245,13 @@ section = st.sidebar.radio(
         "Random Forest",
         "Neural Network",
         "Model Comparison",
+        "Random Testing",
     ],
 )
 
 df = clean_and_encode(raw_df)
 target_names = ['NO', '>30', '<30']
+LABEL_DESC = {0: 'NO', 1: '>30 days', 2: '<30 days'}
 
 # ---------------------------------------------------------------------------
 if section == "Data & Cleaning":
@@ -429,3 +434,65 @@ elif section == "Model Comparison":
     plt.xticks(rotation=0)
     plt.tight_layout()
     st.pyplot(fig)
+
+# ---------------------------------------------------------------------------
+elif section == "Random Testing":
+    st.header("Random Testing")
+    st.subheader("Try a prediction on a test-set patient")
+    st.write("Pick a random patient from the test set and compare each model's prediction to the true label.")
+
+    results = train_models(df)
+    X_test, y_test = results["X_test"], results["y_test"]
+    rf_model, nn_model = results["rf_model"], results["nn_model"]
+    scaler_rf, scaler_nn = results["scaler_rf"], results["scaler_nn"]
+    imputer = results["imputer"]
+
+    if "row_idx" not in st.session_state:
+        st.session_state.row_idx = 0
+
+    if st.button("🎲 Pick a random patient"):
+        st.session_state.row_idx = int(np.random.randint(0, len(X_test)))
+
+    idx = st.session_state.row_idx
+    row = X_test.iloc[[idx]]
+    true_label = int(y_test.iloc[idx])
+
+    # Random Forest: same scaling used at training time (no imputation needed,
+    # RF pipeline was trained directly on the scaled features).
+    row_scaled_rf = scaler_rf.transform(row)
+    rf_pred = int(rf_model.predict(row_scaled_rf)[0])
+    rf_proba = rf_model.predict_proba(row_scaled_rf)[0]
+
+    # Neural Network: needs the same imputation + scaling used at training time.
+    row_imputed = pd.DataFrame(imputer.transform(row), columns=row.columns)
+    row_scaled_nn = scaler_nn.transform(row_imputed)
+    nn_pred = int(nn_model.predict(row_scaled_nn)[0])
+    nn_proba = nn_model.predict_proba(row_scaled_nn)[0]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Actual", LABEL_DESC[true_label])
+    c2.metric("Random Forest predicted", LABEL_DESC[rf_pred],
+              delta="Correct" if rf_pred == true_label else "Wrong")
+    c3.metric("Neural Network predicted", LABEL_DESC[nn_pred],
+              delta="Correct" if nn_pred == true_label else "Wrong")
+
+    proba_df = pd.DataFrame(
+        {"Random Forest": rf_proba, "Neural Network": nn_proba},
+        index=target_names,
+    )
+    fig, ax = plt.subplots(figsize=(6, 3))
+    proba_df.plot(kind="bar", ax=ax, colormap="Set2")
+    ax.set_ylabel("Probability")
+    ax.set_ylim(0, 1)
+    plt.xticks(rotation=0)
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    with st.expander("Show patient raw features"):
+        st.dataframe(row.T.rename(columns={row.index[0]: "value"}))
+
+st.divider()
+st.caption(
+    "Dataset: Diabetes 130-US hospitals. Models trained on Min-Max scaled features, "
+    "80/20 stratified train/test split, Random Forest (200 trees) vs MLP Neural Network (64, 32)."
+)
