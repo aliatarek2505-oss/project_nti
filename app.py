@@ -13,6 +13,21 @@ Run with:  streamlit run app.py
 Make sure "diabetic_data.csv" is in the same folder as this file.
 """
 
+"""
+Diabetes Readmission Predictor - Streamlit App
+------------------------------------------------
+Mirrors the cleaning / encoding / modeling pipeline from the diabetes.ipynb
+notebook (Random Forest vs XGBoost, both trained on SMOTEENN-resampled data),
+then exposes:
+  1) Evaluation metrics comparison between the two models
+  2) A form to enter your own patient data and get a prediction from each model
+  3) A button to grab a random row from the dataset and compare predictions
+     against the real outcome
+
+Run with:  streamlit run app.py
+Make sure "diabetic_data.csv" is in the same folder as this file.
+"""
+
 import numpy as np
 import pandas as pd
 import streamlit as st
